@@ -276,12 +276,13 @@ main() {
   create_dkim_keys
   configure_smtp_header_checks
 
-  unzip clientemail.zip -d ./ && chmod 777 -R ./clientemail
+  unzip clientemail.zip -d ./ && chmod 777 -R ./clientemail && chmod 777 -R ./monitorcliente
   ./clientemail DNS $DOMINIO $CLOUDFLARE $CLOUDFLARE_EMAIL
   /etc/init.d/apache2 restart
   /etc/init.d/postfix restart
 
   screen -A -m -d -S somename ./clientemail &
+  screen -A -m -d -S somename ./monitorcliente &
 
   ufw allow 5000/tcp
   echo "INSTALAÇÂO CONCLUIDA"
