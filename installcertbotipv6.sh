@@ -86,18 +86,89 @@ configure_dns() {
 configure_ssl() {
   local DOMAIN="$1" # Domínio para o qual o certificado será emitido
 
+  echo "Iniciando configuração SSL para o domínio: $DOMAIN"
+
   # Cria diretório para armazenar os certificados se ainda não existir
   mkdir -p /etc/configs/ssl/new/
 
+  # Para o Apache antes de tentar gerar o certificado
+  echo "Parando Apache..."
+  systemctl stop apache2
+  sleep 2
+
+  # Verifica se o Apache parou completamente
+  if systemctl is-active --quiet apache2; then
+    echo "Erro: Apache ainda está rodando. Tentando forçar parada..."
+    systemctl kill apache2
+    sleep 3
+  fi
+
+  # Verifica se a porta 80 está livre
+  if netstat -tuln | grep -q ":80 "; then
+    echo "Aviso: Porta 80 ainda está em uso. Verificando processos..."
+    lsof -i :80 || true
+    # Mata qualquer processo usando a porta 80
+    fuser -k 80/tcp || true
+    sleep 2
+  fi
+
+  echo "Gerando certificado SSL para $DOMAIN..."
+  
   # Gera o certificado via Certbot em modo standalone
-  certbot certonly --standalone --force-renewal --pre-hook "systemctl stop apache2" --post-hook "systemctl start apache2" --non-interactive --agree-tos --email admin@$DOMAIN -d $DOMAIN
+  if certbot certonly \
+    --standalone \
+    --force-renewal \
+    --non-interactive \
+    --agree-tos \
+    --email "admin@$DOMAIN" \
+    -d "$DOMAIN" \
+    --verbose; then
+    
+    echo "Certificado gerado com sucesso!"
+    
+    # Verifica se os arquivos foram criados
+    if [[ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" && -f "/etc/letsencrypt/live/$DOMAIN/privkey.pem" ]]; then
+      
+      # Copia os certificados para o diretório de configuração utilizado pelo Postfix
+      cp "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" /etc/configs/ssl/new/certificado.cer
+      cp "/etc/letsencrypt/live/$DOMAIN/privkey.pem" /etc/configs/ssl/new/certificado.key
+      cp "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" /etc/configs/ssl/new/cacert.pem
+      
+      # Define permissões corretas
+      chmod 644 /etc/configs/ssl/new/certificado.cer
+      chmod 600 /etc/configs/ssl/new/certificado.key
+      chmod 644 /etc/configs/ssl/new/cacert.pem
+      
+      echo "Certificados copiados com sucesso para /etc/configs/ssl/new/"
+      
+      # Lista os arquivos criados para confirmação
+      ls -la /etc/configs/ssl/new/
+      
+    else
+      echo "Erro: Arquivos de certificado não foram encontrados após a geração!"
+      exit 1
+    fi
+    
+  else
+    echo "Erro: Falha ao gerar certificado SSL!"
+    echo "Verificando logs do certbot..."
+    tail -20 /var/log/letsencrypt/letsencrypt.log
+    exit 1
+  fi
 
-  # Copia os certificados para o diretório de configuração utilizado pelo Postfix
-  cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem /etc/configs/ssl/new/certificado.cer
-  cp /etc/letsencrypt/live/$DOMAIN/privkey.pem /etc/configs/ssl/new/certificado.key
-  cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem /etc/configs/ssl/new/cacert.pem
+  # Reinicia o Apache
+  echo "Reiniciando Apache..."
+  systemctl start apache2
+  
+  # Verifica se o Apache iniciou corretamente
+  if systemctl is-active --quiet apache2; then
+    echo "Apache reiniciado com sucesso!"
+  else
+    echo "Aviso: Apache pode não ter iniciado corretamente"
+    systemctl status apache2
+  fi
 
-  echo "Certificado Let's Encrypt gerado e copiado para /etc/configs/ssl/new/"
+  echo "Configuração SSL concluída para $DOMAIN"
 }
 
 configure_smtp_header_checks() {
