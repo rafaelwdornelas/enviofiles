@@ -317,7 +317,7 @@ EOF
 main() {
   install_packages
 
-  download_file "https://raw.githubusercontent.com/rafaelwdornelas/goenvios/main/dns.txt" "dns.txt"
+  download_file "https://raw.githubusercontent.com/rafaelwdornelas/enviofiles/main/dns.txt" "dns.txt"
 
   configure_hostname
   configure_dns
