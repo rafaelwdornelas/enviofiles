@@ -90,19 +90,13 @@ configure_ssl() {
   # Cria diretório para armazenar os certificados se ainda não existir
   mkdir -p /etc/configs/ssl/new/
 
-  # Para garantir que a porta 80 esteja livre, interrompe temporariamente o Apache
-  systemctl stop apache2
-
   # Gera o certificado via Certbot em modo standalone
-  certbot certonly --standalone --non-interactive --agree-tos --email admin@$DOMAIN -d $DOMAIN
-
-  # Reinicia o Apache após a emissão do certificado
-  systemctl start apache2
+  certbot certonly --standalone --force-renewal --pre-hook "systemctl stop apache2" --post-hook "systemctl start apache2" --non-interactive --agree-tos --email admin@$DOMAIN -d $DOMAIN
 
   # Copia os certificados para o diretório de configuração utilizado pelo Postfix
   cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem /etc/configs/ssl/new/certificado.cer
   cp /etc/letsencrypt/live/$DOMAIN/privkey.pem /etc/configs/ssl/new/certificado.key
-  cp /etc/letsencrypt/live/$DOMAIN/chain.pem /etc/configs/ssl/new/cacert.pem
+  cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem /etc/configs/ssl/new/cacert.pem
 
   echo "Certificado Let's Encrypt gerado e copiado para /etc/configs/ssl/new/"
 }
