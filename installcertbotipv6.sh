@@ -83,40 +83,47 @@ configure_dns() {
   systemctl restart networking
 }
 
+# Função para configurar SSL usando DNS Challenge via Cloudflare
 configure_ssl() {
-  local DOMAIN="$1" # Domínio para o qual o certificado será emitido
+  local DOMAIN="$1"
+  local CF_TOKEN="$2"
+  local CF_EMAIL="$3"
 
-  echo "Iniciando configuração SSL para o domínio: $DOMAIN"
+  echo "Iniciando configuração SSL via Cloudflare para o domínio: $DOMAIN"
 
   # Cria diretório para armazenar os certificados se ainda não existir
   mkdir -p /etc/configs/ssl/new/
 
-  # Para o Apache antes de tentar gerar o certificado
-  echo "Parando Apache..."
-  systemctl stop apache2
-  sleep 2
+  # Instala o plugin do Cloudflare para Certbot
+  echo "Instalando plugin do Cloudflare para Certbot..."
+  apt-get update
+  apt-get install -y python3-certbot-dns-cloudflare
 
-  # Verifica se o Apache parou completamente
-  if systemctl is-active --quiet apache2; then
-    echo "Erro: Apache ainda está rodando. Tentando forçar parada..."
-    systemctl kill apache2
-    sleep 3
+  # Verifica se a instalação foi bem-sucedida
+  if ! command -v certbot &>/dev/null; then
+    echo "Erro: Certbot não está instalado."
+    exit 1
   fi
 
-  # Verifica se a porta 80 está livre
-  if netstat -tuln | grep -q ":80 "; then
-    echo "Aviso: Porta 80 ainda está em uso. Verificando processos..."
-    lsof -i :80 || true
-    # Mata qualquer processo usando a porta 80
-    fuser -k 80/tcp || true
-    sleep 2
-  fi
+  # Cria arquivo de credenciais do Cloudflare
+  echo "Configurando credenciais do Cloudflare..."
+  tee /etc/cloudflare.ini >/dev/null <<EOF
+# Credenciais da API do Cloudflare
+dns_cloudflare_email = $CF_EMAIL
+dns_cloudflare_api_key = $CF_TOKEN
+EOF
 
-  echo "Gerando certificado SSL para $DOMAIN..."
+  # Define permissões seguras para o arquivo de credenciais
+  chmod 600 /etc/cloudflare.ini
+  chown root:root /etc/cloudflare.ini
+
+  echo "Gerando certificado SSL via DNS Challenge (Cloudflare)..."
   
-  # Gera o certificado via Certbot em modo standalone
+  # Gera o certificado usando DNS Challenge via Cloudflare
   if certbot certonly \
-    --standalone \
+    --dns-cloudflare \
+    --dns-cloudflare-credentials /etc/cloudflare.ini \
+    --dns-cloudflare-propagation-seconds 60 \
     --force-renewal \
     --non-interactive \
     --agree-tos \
@@ -124,7 +131,7 @@ configure_ssl() {
     -d "$DOMAIN" \
     --verbose; then
     
-    echo "Certificado gerado com sucesso!"
+    echo "Certificado gerado com sucesso via Cloudflare DNS!"
     
     # Verifica se os arquivos foram criados
     if [[ -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" && -f "/etc/letsencrypt/live/$DOMAIN/privkey.pem" ]]; then
@@ -144,31 +151,32 @@ configure_ssl() {
       # Lista os arquivos criados para confirmação
       ls -la /etc/configs/ssl/new/
       
+      # Mostra informações do certificado
+      echo "Informações do certificado:"
+      openssl x509 -in /etc/configs/ssl/new/certificado.cer -text -noout | grep -E "(Subject:|Issuer:|Not Before|Not After)"
+      
     else
       echo "Erro: Arquivos de certificado não foram encontrados após a geração!"
       exit 1
     fi
     
   else
-    echo "Erro: Falha ao gerar certificado SSL!"
+    echo "Erro: Falha ao gerar certificado SSL via Cloudflare!"
     echo "Verificando logs do certbot..."
     tail -20 /var/log/letsencrypt/letsencrypt.log
+    echo ""
+    echo "Possíveis causas:"
+    echo "1. Token da API do Cloudflare inválido"
+    echo "2. Email do Cloudflare incorreto"
+    echo "3. Domínio não está na conta do Cloudflare"
+    echo "4. Permissões insuficientes no token da API"
     exit 1
   fi
 
-  # Reinicia o Apache
-  echo "Reiniciando Apache..."
-  systemctl start apache2
+  echo "Configuração SSL via Cloudflare concluída para $DOMAIN"
   
-  # Verifica se o Apache iniciou corretamente
-  if systemctl is-active --quiet apache2; then
-    echo "Apache reiniciado com sucesso!"
-  else
-    echo "Aviso: Apache pode não ter iniciado corretamente"
-    systemctl status apache2
-  fi
-
-  echo "Configuração SSL concluída para $DOMAIN"
+  # Remove o arquivo de credenciais por segurança (opcional)
+  # rm -f /etc/cloudflare.ini
 }
 
 configure_smtp_header_checks() {
@@ -321,7 +329,7 @@ main() {
   configure_hostname
   configure_dns
 
-  configure_ssl "$DOMINIO"
+  configure_ssl "$DOMINIO" "$CLOUDFLARE" "$CLOUDFLARE_EMAIL"
   configure_postfix
   create_dkim_keys
   configure_smtp_header_checks
