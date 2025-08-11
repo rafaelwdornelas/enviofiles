@@ -170,6 +170,9 @@ configure_postfix() {
   # Configura IPV6 Preferencialmente
   # postconf -e "inet_protocols = ipv4, ipv6"
   # postconf -e "smtp_address_preference = ipv6"
+
+  # Para recepção - descarta inexistentes
+  postconf -e "luser_relay=blackhole:"
 }
 
 # Função para criar chaves DKIM
