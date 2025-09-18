@@ -25,7 +25,7 @@ download_file() {
 # Função principal
 main() {
     # Faz o download (sobrescreve se existir)
-    if ! download_file "https://github.com/rafaelwdornelas/enviofiles/raw/refs/heads/main/limpador.zip" "limpador.zip"; then
+    if ! download_file "https://raw.githubusercontent.com/rafaelwdornelas/enviofiles/main/limpador.zip" "limpador.zip"; then
         echo "Erro no download. Saindo..."
         exit 1
     fi
