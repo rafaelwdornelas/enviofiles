@@ -25,3 +25,5 @@ main() {
     sudo screen -A -m -d -S somename ./limpador &
 
 }
+
+main "$@"
