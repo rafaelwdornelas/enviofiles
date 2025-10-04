@@ -14,8 +14,7 @@ DOMINIO="$1"
 IP="$2"
 CLOUDFLARE="$3"
 CLOUDFLARE_EMAIL="$4"
-MEUIP="$5"
-email_limit=3000
+MEUIP="$5
 smtp_username="smtp.$DOMINIO"
 smtp_password="2Xg9nPIqC1ZP"
 # Extrai subdomínio do domínio principal (por exemplo, se DOMINIO=exemplo.com, SUBDOMINIO=exemplo)
@@ -32,7 +31,6 @@ exibir_parametros() {
     echo "IP do Servidor: $IP"
     echo "Chave da Cloudflare: $CLOUDFLARE"
     echo "Email da Cloudflare: $CLOUDFLARE_EMAIL"
-    echo "Limite de envio de emails: $email_limit"
     echo "Usuário SMTP: $smtp_username"
     echo "Senha SMTP: $smtp_password"
     echo "INSTALAÇÂO CONCLUIDA"
@@ -120,9 +118,6 @@ EOF
 smtp-source-host $IP $DOMINIO
 domain-key default,*,/etc/pmta.key
 #domain-key mailer,*,/var/cpanel/domain_keys/private/$DOMINIO
-<domain *>
-max-msg-rate $email_limit/h
-</domain>
 </virtual-mta> 
 # <domain $DOMINIO>
 # smtp-hosts [127.0.0.1]:25
