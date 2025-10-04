@@ -297,6 +297,32 @@ EOF
     done
 }
 
+configurar_firewall_firewalld() {
+    if ! command -v firewall-cmd >/dev/null 2>&1; then
+        echo "firewall-cmd não encontrado; pulando abertura de portas."
+        return 0
+    fi
+
+    echo "Configurando firewalld (abrindo 1983/tcp e 2525/tcp)..."
+    # zona padrão (fallback em 'public' se não conseguir pegar)
+    local ZONE
+    ZONE="$(firewall-cmd --get-default-zone 2>/dev/null || echo public)"
+
+    # Runtime (imediato)
+    firewall-cmd --zone="$ZONE" --add-port=1983/tcp || true
+    firewall-cmd --zone="$ZONE" --add-port=2525/tcp || true
+
+    # Permanente
+    firewall-cmd --permanent --zone="$ZONE" --add-port=1983/tcp || true
+    firewall-cmd --permanent --zone="$ZONE" --add-port=2525/tcp || true
+
+    # Aplicar permanente
+    firewall-cmd --reload || true
+
+    echo "Portas abertas na zona '$ZONE':"
+    firewall-cmd --zone="$ZONE" --list-ports || true
+}
+
 #########################
 # Execução do Script
 #########################
@@ -305,6 +331,7 @@ instalar_dependencias
 instalar_pmta
 configurar_pmta
 configurar_dkim
+configurar_firewall_firewalld
 reiniciar_servicos
 adicionar_registros_cloudflare
 exibir_parametros
