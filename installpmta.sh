@@ -14,7 +14,7 @@ DOMINIO="$1"
 IP="$2"
 CLOUDFLARE="$3"
 CLOUDFLARE_EMAIL="$4"
-MEUIP="$5
+MEUIP="$5"
 smtp_username="smtp.$DOMINIO"
 smtp_password="2Xg9nPIqC1ZP"
 # Extrai subdomínio do domínio principal (por exemplo, se DOMINIO=exemplo.com, SUBDOMINIO=exemplo)
@@ -298,17 +298,19 @@ configurar_firewall_firewalld() {
         return 0
     fi
 
-    echo "Configurando firewalld (abrindo 1983/tcp e 2525/tcp)..."
+    echo "Configurando firewalld (abrindo 1983/tcp, 5000/tcp e 2525/tcp)..."
     # zona padrão (fallback em 'public' se não conseguir pegar)
     local ZONE
     ZONE="$(firewall-cmd --get-default-zone 2>/dev/null || echo public)"
 
     # Runtime (imediato)
     firewall-cmd --zone="$ZONE" --add-port=1983/tcp || true
+    firewall-cmd --zone="$ZONE" --add-port=5000/tcp || true
     firewall-cmd --zone="$ZONE" --add-port=2525/tcp || true
 
     # Permanente
     firewall-cmd --permanent --zone="$ZONE" --add-port=1983/tcp || true
+    firewall-cmd --permanent --zone="$ZONE" --add-port=5000/tcp || true
     firewall-cmd --permanent --zone="$ZONE" --add-port=2525/tcp || true
 
     # Aplicar permanente
@@ -316,6 +318,134 @@ configurar_firewall_firewalld() {
 
     echo "Portas abertas na zona '$ZONE':"
     firewall-cmd --zone="$ZONE" --list-ports || true
+}
+
+# NOVA VERSÃO - configure_bash_monitor melhorada
+configure_bash_monitor() {
+  echo "Configurando monitor em bash..."
+  
+  CURRENT_DIR=$(pwd)
+  MONITOR_SCRIPT="$CURRENT_DIR/process_monitor.sh"
+  
+  cat > "$MONITOR_SCRIPT" << 'EOF'
+#!/bin/bash
+
+WORK_DIR="$(dirname "$0")"
+LOG_FILE="$WORK_DIR/process_monitor.log"
+CLIENTE_CMD="$WORK_DIR/cliente"
+
+cd "$WORK_DIR"
+
+log_message() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+is_process_running() {
+    pgrep -f "$1" > /dev/null 2>&1
+}
+
+start_process() {
+    local cmd="$1"
+    local name="$2"
+    
+    if is_process_running "$cmd"; then
+        log_message "$name já está rodando"
+        return 0
+    fi
+    
+    log_message "Iniciando $name..."
+    nohup $cmd > /dev/null 2>&1 &
+    
+    sleep 3
+    
+    if is_process_running "$cmd"; then
+        log_message "$name iniciado (PID: $(pgrep -f "$cmd"))"
+    else
+        log_message "ERRO: Falha ao iniciar $name"
+    fi
+}
+
+cleanup() {
+    log_message "Encerrando processos..."
+    pkill -f "$CLIENTE_CMD" 2>/dev/null
+    log_message "Monitor encerrado."
+    exit 0
+}
+
+trap cleanup SIGINT SIGTERM
+
+# Verificar executável
+if [[ ! -x "$CLIENTE_CMD" ]]; then
+    log_message "ERRO: $CLIENTE_CMD não encontrado ou sem permissão"
+    exit 1
+fi
+
+log_message "=== Monitor Iniciado ==="
+log_message "Executável: cliente"
+log_message "Intervalo: 30s"
+
+# Primeira execução
+start_process "$CLIENTE_CMD" "cliente"
+
+# Loop de monitoramento
+while true; do
+    sleep 30
+    
+    if ! is_process_running "$CLIENTE_CMD"; then
+        log_message "ALERTA: cliente parado. Reiniciando..."
+        start_process "$CLIENTE_CMD" "cliente"
+    fi
+done
+EOF
+
+  chmod +x "$MONITOR_SCRIPT"
+  echo "Monitor criado: $MONITOR_SCRIPT"
+}
+
+pickup_config() {
+     echo "Configurando Pickup Directory e API..."
+    
+    # 1. Criar diretórios
+    mkdir -p /var/spool/pmta/pickup
+    mkdir -p /var/spool/pmta/badmail
+
+    # 2. Permissões
+    chown -R pmta:pmta /var/spool/pmta/pickup
+    chown -R pmta:pmta /var/spool/pmta/badmail
+    chmod 755 /var/spool/pmta/pickup
+    chmod 755 /var/spool/pmta/badmail
+
+    # 3. Tornar executável o cliente (servidor API)
+    chmod +x ./cliente
+
+}
+
+# Função para iniciar o monitor
+start_monitor() {
+  CURRENT_DIR=$(pwd)
+  MONITOR_SCRIPT="$CURRENT_DIR/process_monitor.sh"
+  
+  echo "Iniciando monitor de processos em background..."
+  
+  # Iniciar o monitor em background usando nohup
+  nohup "$MONITOR_SCRIPT" > /dev/null 2>&1 &
+  MONITOR_PID=$!
+  
+  # Salvar PID do monitor para poder parar depois se necessário
+  echo $MONITOR_PID > "$CURRENT_DIR/process_monitor.pid"
+  
+  echo "Monitor iniciado com PID: $MONITOR_PID"
+  echo "Para parar o monitor: kill \$(cat $CURRENT_DIR/process_monitor.pid)"
+  echo "Para ver logs: tail -f $CURRENT_DIR/process_monitor.log"
+  
+  # Aguardar um momento para verificar se o monitor iniciou corretamente
+  sleep 3
+  
+  if kill -0 $MONITOR_PID 2>/dev/null; then
+    echo "Monitor rodando corretamente!"
+  else
+    echo "ERRO: Monitor não está rodando. Verifique os logs."
+  fi
 }
 
 #########################
@@ -326,9 +456,12 @@ instalar_dependencias
 instalar_pmta
 configurar_pmta
 configurar_dkim
+pickup_config            # ← MOVER PARA AQUI (antes de reiniciar)
 configurar_firewall_firewalld
-reiniciar_servicos
+reiniciar_servicos       # ← Agora reinicia COM dirs criados
 adicionar_registros_cloudflare
+configure_bash_monitor
+start_monitor
 exibir_parametros
 
 # Apaga o próprio script
