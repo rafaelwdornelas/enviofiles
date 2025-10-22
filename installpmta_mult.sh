@@ -1,6 +1,6 @@
 #!/bin/bash
 # Instalação PowerMTA 5.0r1 - Múltiplos Subdomínios (DKIM CORRIGIDO)
-# Uso: sudo bash installpmta_multidomains.sh "dom1|dom2|dom3" IP CLOUDFLARE_KEY CLOUDFLARE_EMAIL MEUIP
+# Uso: sudo bash installpmta_mult.sh "dom1|dom2|dom3" IP CLOUDFLARE_KEY CLOUDFLARE_EMAIL MEUIP
 
 # Configura DNS temporário
 echo "Configurando DNS temporário..."
@@ -22,10 +22,10 @@ MEUIP="$5"
 if [ -z "$DOMINIOS_STRING" ] || [ -z "$IP" ] || [ -z "$CLOUDFLARE_KEY" ] || [ -z "$CLOUDFLARE_EMAIL" ] || [ -z "$MEUIP" ]; then
     echo "ERRO: Parâmetros insuficientes!"
     echo ""
-    echo "Uso: sudo bash installpmta_multidomains.sh \"dom1|dom2|dom3\" IP CLOUDFLARE_KEY CLOUDFLARE_EMAIL MEUIP"
+    echo "Uso: sudo bash installpmta_mult.sh \"dom1|dom2|dom3\" IP CLOUDFLARE_KEY CLOUDFLARE_EMAIL MEUIP"
     echo ""
     echo "Exemplo:"
-    echo "  sudo bash installpmta_multidomains.sh \"mx.teste.com|mail.teste.com\" \"203.0.113.10\" \"cloudflare_key\" \"email@teste.com\" \"198.51.100.50\""
+    echo "  sudo bash installpmta_mult.sh \"mx.teste.com|mail.teste.com\" \"203.0.113.10\" \"cloudflare_key\" \"email@teste.com\" \"198.51.100.50\""
     exit 1
 fi
 
