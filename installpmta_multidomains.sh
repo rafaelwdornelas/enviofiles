@@ -194,19 +194,43 @@ EOF
     done
     
     # Roteamento por domínio remetente
+    echo "Configurando roteamento por domínio..."
+    
+    # Cria bloco <domain *> com rotas customizadas
     echo "# Roteamento por domínio remetente" >> /etc/pmta/config
+    echo "<domain *>" >> /etc/pmta/config
+    
+    # Adiciona rotas para cada domínio
     for dominio in "${DOMINIOS[@]}"; do
         local vmta_name=$(echo "$dominio" | tr '.' '-')
-        echo "<domain *>" >> /etc/pmta/config
         echo "    <route ${dominio}>" >> /etc/pmta/config
         echo "        use-vmta vmta-${vmta_name}" >> /etc/pmta/config
         echo "    </route>" >> /etc/pmta/config
-        echo "</domain>" >> /etc/pmta/config
-        echo "" >> /etc/pmta/config
     done
     
-    # Anexa o resto do config (backoff, bounces, etc)
-    cat config >> /etc/pmta/config
+    # Se existe arquivo config, extrai conteúdo do <domain *> dele
+    if [ -f "config" ]; then
+        # Extrai apenas o conteúdo DENTRO do bloco <domain *> (sem as tags)
+        # e adiciona no nosso bloco consolidado
+        awk '
+            /<domain \*>/ { inside=1; next }
+            /<\/domain>/ && inside { inside=0; next }
+            inside && !/^[[:space:]]*$/ { print "    " $0 }
+        ' config >> /etc/pmta/config
+    fi
+    
+    # Fecha o bloco <domain *>
+    echo "</domain>" >> /etc/pmta/config
+    echo "" >> /etc/pmta/config
+    
+    # Anexa o resto do config (EXCETO o bloco <domain *>)
+    if [ -f "config" ]; then
+        awk '
+            /<domain \*>/ { inside=1; next }
+            /<\/domain>/ && inside { inside=0; next }
+            !inside { print }
+        ' config >> /etc/pmta/config
+    fi
     
     chown root:pmta /etc/pmta/config
 }
