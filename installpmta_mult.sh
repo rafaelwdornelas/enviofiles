@@ -97,16 +97,81 @@ EOF
 
 instalar_dependencias() {
     echo "Instalando Dependencias..."
-    # Pacotes básicos
-    sudo yum install -y unzip openssl curl
-    # Perl
-    sudo yum install -y perl
-    # Dependências do PowerMTA
-    sudo yum install -y perl-core perl-File-Temp perl-Getopt-Long perl-Storable perl-Time-Local initscripts
-    # Dependências do PowerMTA
-    sudo yum install libcap -y
+    otimizar_e_instalar
+}
 
-    sudo mkdir -p /etc/rc.d/rc{0..6}.d
+otimizar_e_instalar() {
+  set -euo pipefail
+  
+  PKGS_BASE=(unzip openssl curl)
+  PKGS_PERL=(perl perl-core perl-File-Temp perl-Getopt-Long perl-Storable perl-Time-Local)
+  PKGS_PMTA=(initscripts libcap)
+  
+  if command -v dnf &>/dev/null; then
+    MGR=dnf
+  else
+    MGR=yum
+  fi
+  
+  echo "[*] Otimizando $MGR..."
+  
+  if [ "$MGR" = "dnf" ]; then
+    # Config DNF (SEM mexer nos repos)
+    sudo tee /etc/dnf/dnf.conf > /dev/null <<EOF
+[main]
+gpgcheck=1
+installonly_limit=3
+clean_requirements_on_remove=True
+best=True
+skip_if_unavailable=True
+fastestmirror=True
+max_parallel_downloads=10
+deltarpm=True
+timeout=30
+retries=5
+ip_resolve=4
+EOF
+    
+    # Limpa cache
+    sudo dnf clean all -q
+    
+    # Testa repos antes de instalar
+    echo "[*] Verificando repos..."
+    if ! sudo dnf repolist -q &>/dev/null; then
+      echo "[!] Repos inacessíveis, tentando refresh forçado..."
+      sudo dnf clean metadata
+      sudo dnf makecache --refresh || {
+        echo "[ERRO] Repos offline. Verifique rede/DNS"
+        return 1
+      }
+    fi
+    
+    # Instala
+    sudo dnf install -y --setopt=retries=5 --setopt=timeout=30 \
+      "${PKGS_BASE[@]}" "${PKGS_PERL[@]}" "${PKGS_PMTA[@]}" 2>&1 | grep -v "already installed" || true
+      
+  else
+    # YUM
+    sudo yum install -y yum-plugin-fastestmirror &>/dev/null || true
+    sudo tee /etc/yum/pluginconf.d/fastestmirror.conf > /dev/null <<EOF
+[main]
+enabled=1
+verbose=0
+socket_timeout=15
+maxhostfileage=5
+EOF
+    
+    grep -q '^timeout=' /etc/yum.conf || echo "timeout=30" | sudo tee -a /etc/yum.conf
+    grep -q '^retries=' /etc/yum.conf || echo "retries=5" | sudo tee -a /etc/yum.conf
+    
+    sudo yum clean all -q
+    sudo yum makecache fast -q || true
+    sudo yum install -y --skip-broken \
+      "${PKGS_BASE[@]}" "${PKGS_PERL[@]}" "${PKGS_PMTA[@]}"
+  fi
+  
+  sudo mkdir -p /etc/rc.d/rc{0..6}.d
+  echo "[OK] Instalado"
 }
 
 instalar_pmta() {
