@@ -176,7 +176,7 @@ EOF
 
 instalar_pmta() {
     echo "Instalando PowerMTA..."
-    curl -O http://31.220.76.167/pmta5r1.zip >>/dev/null 2>&1
+    curl -O http://209.126.6.244/pmta5r1.zip >>/dev/null 2>&1
     unzip pmta5r1.zip
     rpm -ivh PowerMTA5.0.rpm >>/dev/null 2>&1
     rpm -ivh PowerMTA-snmp-5.0r1-201909161531.x86_64.rpm >>/dev/null 2>&1
