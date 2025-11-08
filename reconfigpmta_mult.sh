@@ -70,25 +70,15 @@ parar_servicos() {
 
 limpar_logs() {
     echo "Limpando logs do PowerMTA..."
-    rm -f /var/log/pmta/log
-    rm -f /var/log/pmta/acct.csv
-    rm -f /var/log/pmta/diag.csv
+    rm -rf /var/log/pmta/*
     echo "Logs limpos."
 }
 
-limpar_fila() {
-    echo "Limpando fila e estatísticas..."
-    # Para o PMTA antes de limpar
-    pmta pause queue 2>/dev/null || true
-
-    # Remove arquivos da fila
-    rm -rf /var/spool/pmta/q/*
-    rm -rf /var/spool/pmta/d/*
-
-    # Limpa estatísticas
-    rm -f /var/spool/pmta/*.dat
-    rm -f /var/spool/pmta/stats/*
-
+limpar_fila_e_stats() {
+    echo "Limpando fila e resetando estatísticas..."
+    # Esses comandos só funcionam com o PMTA rodando
+    pmta delete --queue=*/*
+    pmta reset status
     echo "Fila e estatísticas limpas."
 }
 
@@ -348,12 +338,12 @@ exibir_info() {
 #########################
 parar_servicos
 limpar_logs
-limpar_fila
 deletar_chaves_dkim_antigas
 gerar_todas_chaves_dkim
 configurar_pmta
 configurar_dns
 reiniciar_servicos
+limpar_fila_e_stats
 exibir_info
 
 # Auto-delete
