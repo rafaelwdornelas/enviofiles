@@ -421,6 +421,7 @@ EOF_ACCT_BOUNCES
         log "Anexando configuração base (ISP rules, backoff patterns)..."
 
         # Processa o config base para substituir placeholders por valores fixos (1 IP)
+        # E já remove linhas que não queremos (pickup duplicado, total-max-smtp-out)
         sed -e 's/__TOTAL_MAX_SMTP_OUT__/20/g' \
             -e 's/__HOTMAIL_LIMIT__/250/g' \
             -e 's/__HOTMAIL_BACKOFF__/25/g' \
@@ -480,13 +481,9 @@ EOF_ACCT_BOUNCES
             -e 's/__ZIPMAIL_BACKOFF__/20/g' \
             -e 's/__LINKBR_LIMIT__/200/g' \
             -e 's/__LINKBR_BACKOFF__/20/g' \
+            -e '/^pickup /d' \
+            -e '/^total-max-smtp-out/d' \
             /tmp/pmta_config_base.txt >> "$CONFIG_FILE"
-
-        # Remove a linha total-max-smtp-out (não queremos limite global)
-        sed -i '/^total-max-smtp-out/d' "$CONFIG_FILE"
-
-        # Remove pickup duplicado (já tem no início)
-        sed -i '/^pickup \/var\/spool\/pmta\/pickup/d' "$CONFIG_FILE"
 
         log "✓ Configuração base anexada"
     else
